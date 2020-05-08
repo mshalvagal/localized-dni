@@ -9,7 +9,9 @@ from functools import partial
 
 class UnidirectionalInterface(torch.nn.Module):
     """Basic `Interface` for unidirectional communication.
+
     Can be used to manually pass `messages` with methods `send` and `receive`.
+
     Args:
         synthesizer: `Synthesizer` to use to generate `messages`.
     """
@@ -21,10 +23,13 @@ class UnidirectionalInterface(torch.nn.Module):
 
     def receive(self, trigger):
         """Synthesizes a `message` based on `trigger`.
+
         Detaches `message` so no gradient will go through it during the
         backward pass.
+
         Args:
             trigger: `trigger` to use to synthesize a `message`.
+
         Returns:
             The synthesized `message`.
         """
@@ -34,10 +39,12 @@ class UnidirectionalInterface(torch.nn.Module):
 
     def send(self, message, trigger):
         """Updates the estimate of synthetic `message` based on `trigger`.
+
         Synthesizes a `message` based on `trigger`, computes the MSE between it
         and the input `message` and backpropagates it to compute its gradient
         w.r.t. `Synthesizer` parameters. Does not backpropagate through
         `trigger`.
+
         Args:
             message: Ground truth `message` that should be synthesized based on
                 `trigger`.
@@ -53,26 +60,32 @@ class UnidirectionalInterface(torch.nn.Module):
 
 class ForwardInterface(UnidirectionalInterface):
     """`Interface` for synthesizing activations in the forward pass.
+
     Can be used to achieve a forward unlock. It does not make too much sense to
     use it on its own, as it breaks backpropagation (no gradients pass through
     `ForwardInterface`). To achieve both forward and update unlock, use
     `BidirectionalInterface`.
+
     Args:
         synthesizer: `Synthesizer` to use to generate `messages`.
     """
 
     def forward(self, message, trigger):
         """Synthetic forward pass, no backward pass.
+
         Convenience method combining `send` and `receive`. Updates the
         `message` estimate based on `trigger` and returns a synthetic
         `message`.
+
         Works only in `training` mode, otherwise just returns the input
         `message`.
+
         Args:
             message: Ground truth `message` that should be synthesized based on
                 `trigger`.
             trigger: `trigger` that the `message` should be synthesized based
                 on.
+
         Returns:
             The synthesized `message`.
         """
@@ -85,24 +98,31 @@ class ForwardInterface(UnidirectionalInterface):
 
 class BackwardInterface(UnidirectionalInterface):
     """`Interface` for synthesizing gradients in the backward pass.
+
     Can be used to achieve an update unlock.
+
     Args:
         synthesizer: `Synthesizer` to use to generate gradients.
     """
 
     def forward(self, trigger):
         """Normal forward pass, synthetic backward pass.
+
         Convenience method combining `backward` and `make_trigger`. Can be
         used when we want to backpropagate synthetic gradients from and
         intercept real gradients at the same `Variable`, for example for
         update decoupling feed-forward networks.
+
         Backpropagates synthetic gradient from `trigger` and returns a copy of
         `trigger` with a synthetic gradient update operation attached.
+
         Works only in `training` mode, otherwise just returns the input
         `trigger`.
+
         Args:
             trigger: `trigger` to backpropagate synthetic gradient from and
                 intercept real gradient at.
+
         Returns:
             A copy of `trigger` with a synthetic gradient update operation
             attached.
@@ -115,9 +135,12 @@ class BackwardInterface(UnidirectionalInterface):
 
     def backward(self, trigger, factor=1):
         """Backpropagates synthetic gradient from `trigger`.
+
         Computes synthetic gradient based on `trigger`, scales it by `factor`
         and backpropagates it from `trigger`.
+
         Works only in `training` mode, otherwise is a no-op.
+
         Args:
             trigger: `trigger` to compute synthetic gradient based on and to
                 backpropagate it from.
@@ -126,15 +149,19 @@ class BackwardInterface(UnidirectionalInterface):
         """
         if self.training:
             synthetic_gradient = self.receive(trigger)
+            self.synth_grad_norm = synthetic_gradient.norm()
             _Manager.backward(trigger, synthetic_gradient.data * factor)
 
     def make_trigger(self, trigger):
         """Attaches a synthetic gradient update operation to `trigger`.
+
         Returns a `Variable` with the same `data` as `trigger`, that during
         the backward pass will intercept gradient passing through it and use
         this gradient to update the `Synthesizer`'s estimate.
+
         Works only in `training` mode, otherwise just returns the input
         `trigger`.
+
         Returns:
             A copy of `trigger` with a synthetic gradient update operation
             attached.
@@ -153,10 +180,10 @@ class _SyntheticGradientUpdater(torch.autograd.Function):
     @staticmethod
     def forward(ctx, trigger, synthetic_gradient):
         (_, needs_synthetic_gradient_grad) = ctx.needs_input_grad
-        if not needs_synthetic_gradient_grad:
-            raise ValueError(
-                'synthetic_gradient should need gradient but it does not'
-            )
+        # if not needs_synthetic_gradient_grad:
+        #     raise ValueError(
+        #         'synthetic_gradient should need gradient but it does not'
+        #     )
 
         ctx.save_for_backward(synthetic_gradient)
         # clone trigger to force creating a new Variable with
@@ -177,7 +204,9 @@ class _SyntheticGradientUpdater(torch.autograd.Function):
 
 class BidirectionalInterface(torch.nn.Module):
     """`Interface` for synthesizing both activations and gradients w.r.t. them.
+
     Can be used to achieve a full unlock.
+
     Args:
         forward_synthesizer: `Synthesizer` to use to generate `messages`.
         backward_synthesizer: `Synthesizer` to use to generate gradients w.r.t.
@@ -192,13 +221,16 @@ class BidirectionalInterface(torch.nn.Module):
 
     def forward(self, message, trigger):
         """Synthetic forward pass, synthetic backward pass.
+
         Convenience method combining `send` and `receive`. Can be used when we
         want to `send` and immediately `receive` using the same `trigger`. For
         more complex scenarios, `send` and `receive` need to be used
         separately.
+
         Updates the `message` estimate based on `trigger`, backpropagates
         synthetic gradient from `message` and returns a synthetic `message`
         with a synthetic gradient update operation attached.
+
         Works only in `training` mode, otherwise just returns the input
         `message`.
         """
@@ -211,10 +243,13 @@ class BidirectionalInterface(torch.nn.Module):
     def receive(self, trigger):
         """Combination of `ForwardInterface.receive` and
         `BackwardInterface.make_trigger`.
+
         Generates a synthetic `message` based on `trigger` and attaches to it
         a synthetic gradient update operation.
+
         Args:
             trigger: `trigger` to use to synthesize a `message`.
+
         Returns:
             The synthesized `message` with a synthetic gradient update
             operation attached.
@@ -225,8 +260,10 @@ class BidirectionalInterface(torch.nn.Module):
     def send(self, message, trigger):
         """Combination of `ForwardInterface.send` and
         `BackwardInterface.backward`.
+
         Updates the estimate of synthetic `message` based on `trigger` and
         backpropagates synthetic gradient from `message`.
+
         Args:
             message: Ground truth `message` that should be synthesized based on
                 `trigger` and that synthetic gradient should be backpropagated
@@ -240,6 +277,7 @@ class BidirectionalInterface(torch.nn.Module):
 
 class BasicSynthesizer(torch.nn.Module):
     """Basic `Synthesizer` based on an MLP with ReLU activation.
+
     Args:
         output_dim: Dimensionality of the synthesized `messages`.
         n_hidden (optional): Number of hidden layers. Defaults to 0.
@@ -286,19 +324,24 @@ class BasicSynthesizer(torch.nn.Module):
         # zero-initialize the last layer, as in the paper
         if n_hidden > 0:
             init.constant(self.layers[-1].weight, 0)
+            init.constant(self.layers[-1].bias, 0)
         else:
             init.constant(self.input_trigger.weight, 0)
+            init.constant(self.input_trigger.bias, 0)
             if context_dim is not None:
                 init.constant(self.input_context.weight, 0)
+                init.constant(self.input_context.bias, 0)
 
     def forward(self, trigger, context):
         """Synthesizes a `message` based on `trigger` and `context`.
+
         Args:
             trigger: `trigger` to synthesize the `message` based on. Size:
                 (`batch_size`, `trigger_dim`).
             context: `context` to condition the synthesizer. Ignored if
                 `context_dim` has not been specified in the constructor. Size:
                 (`batch_size`, `context_dim`).
+
         Returns:
             The synthesized `message`.
         """
@@ -316,12 +359,15 @@ class BasicSynthesizer(torch.nn.Module):
 @contextmanager
 def defer_backward():
     """Defers backpropagation until the end of scope.
+
     Accumulates all gradients passed to `dni.backward` inside the scope and
     backpropagates them all in a single `torch.autograd.backward` call.
+
     Use it and `dni.backward` whenever you want to backpropagate multiple times
     through the same nodes in the computation graph, for example when mixing
     real and synthetic gradients. Otherwise, PyTorch will complain about
     backpropagating more than once through the same graph.
+
     Scopes of this context manager cannot be nested.
     """
     if _Manager.defer_backward:
@@ -341,8 +387,10 @@ def defer_backward():
 @contextmanager
 def synthesizer_context(context):
     """Conditions `Synthesizer` calls within the scope on the given `context`.
+
     All `Synthesizer.forward` calls within the scope will receive `context`
     as an argument.
+
     Scopes of this context manager can be nested.
     """
     _Manager.context_stack.append(context)
@@ -381,11 +429,14 @@ class _Manager:
 
 """A simplified variant of `torch.autograd.backward` influenced by
 `defer_backward`.
+
 Inside of `defer_backward` scope, accumulates passed gradient to backpropagate
 it at the end of scope. Outside of `defer_backward`, backpropagates the
 gradient immediately.
+
 Use it and `defer_backward` whenever you want to backpropagate multiple times
 through the same nodes in the computation graph.
+
 Args:
     variable: `Variable` to backpropagate the gradient from.
     gradient (optional): Gradient to backpropagate from `variable`. Defaults
