@@ -1,0 +1,38 @@
+---
+# Setup
+random-seed: 42
+num-runs: 3
+epochs: 40
+no-cuda: False
+
+# Logging parameters
+log-params:
+  log-interval: 10
+  logdir: 'logs'
+  metrics:
+    weights: True
+    loss: True
+    accuracy: True
+    test-accuracy: True
+    synth-grad-norm: True
+
+# Training hyperparameters
+hyperparams:
+  batch-size: 256
+  learning-rate: 0.001
+  test-batch-size: 1000
+
+# Network config
+# Note: first hidden layer fixed at size 20 in case 2 hidden layers are used
+network-config:
+  dni: 
+    flag: True
+    context: False
+  synth-grad-frozen:
+    flag: False
+    pretrained: False
+    path: '/home/manu/Projects/dni-bio'
+
+# Experimental settings
+experiment-params: 
+  placeholder: None
