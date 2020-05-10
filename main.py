@@ -35,6 +35,12 @@ class Experiment():
         self.train_loader, self.test_loader = self._create_data_loaders(use_cuda)
 
         self.network_generator = Net
+        self.current_run = 0
+        self.net = None
+        self.criterion = None
+        self.optimizer = None
+        self.optimizer_dni = None
+        self.metrics_list = {}
 
     def _create_data_loaders(self, use_cuda):
         '''
@@ -65,14 +71,26 @@ class Experiment():
             And then created this function to hide the madness
         '''
 
-        dirname = 'dni' if self.network_config['dni']['flag'] else 'vanila'
-        if self.network_config['synth-grad-frozen']['flag'] and self.network_config['dni']['flag']:
-            description = 'frozen_synthesizer_nonzero'
-            if self.network_config['synth-grad-frozen']['pretrained']:
-                description += '_pretrained'
-            dirname += '_' + description
+        num_neurons = self.network_config['num-neurons']
+        optimizer = self.experiment_params['optimizer']
+        parent_dir = optimizer + ' ' + str(num_neurons)
 
-        self.logdir = os.path.join(self.logparams['logdir'], dirname)
+        dirname = 'dni' if self.network_config['dni']['flag'] else 'vanila'
+        description = ''
+        if self.network_config['dni']['flag']:
+            if self.network_config['dni']['synthesizer'] != 'mlp':
+                description += '_' + self.network_config['dni']['synthesizer']
+            if self.network_config['synth-grad-frozen']['flag']:
+                description += '_frozen_synthesizer'
+            if self.network_config['synth-grad-frozen']['pretrained']:
+                description += '_pretrained_' + str(self.network_config['synth-grad-frozen']['epoch-num']) + '_epochs'
+                if self.network_config['synth-grad-frozen']['synced-init']:
+                    description += '_synced'
+            if self.network_config['dni']['non-zero-init']:
+                description += '_nonzero'
+            dirname += description
+
+        self.logdir = os.path.join(self.logparams['logdir'], parent_dir, dirname)
         os.makedirs(self.logdir, exist_ok=True)
 
     def _setup_metrics(self):
@@ -97,24 +115,54 @@ class Experiment():
             print('Beginning run ' + str(i))
             self._setup_metrics()
 
-            trained_net_file = self.network_config['synth-grad-frozen']['path'] if self.network_config['synth-grad-frozen']['pretrained'] else None
-            self.net = self.network_generator(use_dni=self.network_config['dni']['flag'], context=self.network_config['dni']['context'],
-                freeze_synthesizer=self.network_config['synth-grad-frozen']['flag'], device=self.device, trained_net_file=trained_net_file)
+            use_pretrained = self.network_config['synth-grad-frozen']['pretrained']
+            synced_init = self.network_config['synth-grad-frozen']['synced-init'] and use_pretrained
+            epoch_num = self.network_config['synth-grad-frozen']['epoch-num'] # Which epoch to load synthesizer from
+            trained_net_file = os.path.join(self.network_config['synth-grad-frozen']['path'], 'epoch_' + str(epoch_num) + '.pt') if use_pretrained else None
+            trained_net_initial_file = os.path.join(self.network_config['synth-grad-frozen']['path'], 'epoch_0.pt') if synced_init else None
+
+            self.net = self.network_generator(
+                use_dni=self.network_config['dni']['flag'],
+                context=self.network_config['dni']['context'],
+                device=self.device,
+                num_neurons=self.network_config['num-neurons'],
+                synthesizer_type=self.network_config['dni']['synthesizer'],
+                non_zero_init=self.network_config['dni']['non-zero-init'],
+                freeze_synthesizer=self.network_config['synth-grad-frozen']['flag'],
+                trained_net_file=trained_net_file,
+                trained_net_initial_file=trained_net_initial_file
+                )
             
             print('Model definition')
             print(self.net)
 
             self.criterion = nn.CrossEntropyLoss()
-            self.optimizer = optim.SGD(self.net.parameters(), lr=self.hyperparams['learning-rate'])
+            if self.experiment_params['optimizer'] == 'sgd':
+                self.optimizer = optim.SGD(self.net.parameters(), lr=self.hyperparams['learning-rate'])
+            elif self.experiment_params['optimizer'] == 'adam':
+                self.optimizer = optim.Adam(self.net.parameters(), lr=self.hyperparams['learning-rate'])
+
+            # In case we want to use a different optimizer for the synthesizer, we first need to separate
+            # the synthesizer params
+            if self.experiment_params['optimizer'] == 'mixed':
+                assert self.network_config['dni']['flag'], "Mixed optimizer can only be used for DNI"
+                dni_params = []
+                net_params = []
+                for name, param in self.net.named_parameters():
+                    if name.startswith('backward_interface'):
+                        dni_params.append(param)
+                    else:
+                        net_params.append(param)
+                self.optimizer = optim.SGD(net_params, lr=self.hyperparams['learning-rate'])
+                self.optimizer_dni = optim.Adam(dni_params, lr=self.hyperparams['learning-rate'])
+            
             # self.scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
             
             self._train(self.num_epochs)
             for metric in self.metrics_list:
                 self.metrics_list[metric].save_to_disk(self.logdir, i)
 
-    def _train(self, num_epochs, start_epoch=0, teacher_training=False):
-        self.test_acc = []
-        self.cosine_dist_hists = []
+    def _train(self, num_epochs):
 
         log_interval = self.logparams['log-interval']
 
@@ -126,9 +174,9 @@ class Experiment():
 
             running_loss = 0.0
             running_acc = 0.0
-            
-            if self.logparams['metrics']['weights'] and not teacher_training:
-                torch.save(self.net, os.path.join(self.logdir, 'weight_history', 'run_' + str(self.current_run), 'epoch_'+ str(epoch + start_epoch +  1) + '.pt'))
+                        
+            if self.logparams['metrics']['weights']:
+                torch.save(self.net, os.path.join(self.logdir, 'weight_history', 'run_' + str(self.current_run), 'epoch_'+ str(epoch) + '.pt'))
 
             for batch_idx, data in enumerate(self.train_loader, 0):
                 # get the inputs; data is a list of [inputs, labels]
@@ -136,21 +184,25 @@ class Experiment():
 
                 # zero the parameter gradients
                 self.optimizer.zero_grad()
+                if self.network_config['dni']['flag'] and self.experiment_params['optimizer'] == 'mixed':
+                    self.optimizer_dni.zero_grad()
 
                 # forward + backward + optimize
                 outputs = self.net(inputs)
                 loss = self.criterion(outputs, labels)
                 loss.backward()
                 self.optimizer.step()
+                if self.network_config['dni']['flag'] and self.experiment_params['optimizer'] == 'mixed':
+                    self.optimizer_dni.step()
 
                 # print statistics
                 running_loss += loss.item()
-                acc = torch.sum(torch.argmax(outputs, dim=1)==labels).item()/self.train_loader.batch_size
+                acc = torch.sum(torch.argmax(outputs, dim=1) == labels).item()/self.train_loader.batch_size
                 running_acc += acc
 
                 if batch_idx % log_interval == (log_interval - 1):
                     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTraining accuracy: {:.2f}%'.format(
-                        epoch + start_epoch + 1, batch_idx * self.train_loader.batch_size, len(self.train_loader.dataset),
+                        epoch + 1, batch_idx * self.train_loader.batch_size, len(self.train_loader.dataset),
                         100. * batch_idx / len(self.train_loader), loss.item(), acc*100))
                         
                     if self.logparams['metrics']['loss']:
@@ -167,10 +219,13 @@ class Experiment():
             if self.test_loader is not None:
                 val_loss, val_acc = self._test()
                 print('End of epoch {}: Validation loss: {:.6f}\tValidation accuracy: {:.2f}%'.format(
-                    epoch + start_epoch + 1, val_loss, val_acc*100))
+                    epoch + 1, val_loss, val_acc*100))
                 
                 if self.logparams['metrics']['test-accuracy']:
                     self.metrics_list['test_accuracy'].log_vals(val_acc*100)
+        
+        if self.logparams['metrics']['weights']:
+                torch.save(self.net, os.path.join(self.logdir, 'weight_history', 'run_' + str(self.current_run), 'epoch_'+ str(num_epochs) + '.pt'))
 
     def _test(self):
         val_acc = 0.0
@@ -206,5 +261,5 @@ if __name__ == '__main__':
 
     torch.manual_seed(settings['random-seed'])
     experiment = Experiment(settings)
-    experiment.run_experiment()
     shutil.copy2(args.experiment_file, experiment.logdir)
+    experiment.run_experiment()
