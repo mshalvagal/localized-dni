@@ -289,7 +289,7 @@ class BasicSynthesizer(torch.nn.Module):
             not use context. Defaults to `None`.
     """
 
-    def __init__(self, output_dim, n_hidden=0, hidden_dim=None,
+    def __init__(self, output_dim, n_hidden=0, hidden_dim=None, normalize_output=False,
                  trigger_dim=None, context_dim=None, non_zero_init=False):
         super().__init__()
 
@@ -299,6 +299,7 @@ class BasicSynthesizer(torch.nn.Module):
             trigger_dim = output_dim
 
         top_layer_dim = output_dim if n_hidden == 0 else hidden_dim
+        self.normalize_output = normalize_output
 
         self.input_trigger = torch.nn.Linear(
             in_features=trigger_dim, out_features=top_layer_dim
@@ -353,6 +354,9 @@ class BasicSynthesizer(torch.nn.Module):
 
         for layer in self.layers:
             last = layer(F.relu(last))
+
+        if self.normalize_output:
+            last = F.normalize(last, dim=1)
 
         return last
 

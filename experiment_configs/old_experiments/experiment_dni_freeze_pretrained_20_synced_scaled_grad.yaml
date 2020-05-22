@@ -1,7 +1,7 @@
 ---
 # Setup
-random-seed: 42
-num-runs: 1
+random-seed: 25
+num-runs: 3
 epochs: 40
 no-cuda: False
 
@@ -26,18 +26,17 @@ hyperparams:
 network-config:
   num-neurons: 32
   dni: 
-    flag: False
+    flag: True
     context: False
     non-zero-init: False
     synthesizer: 'mlp'
-    scale-grad: False
+    scale-grad: True
   synth-grad-frozen:
-    flag: False
-    pretrained: False
-    path: '/home/manu/Projects/DNI-Bio/logs/sgd 256/dni/weight_history/run_0/'
-    epoch-num: 2
-    synced-init: False
-    epochwise_loading: False
+    flag: True
+    pretrained: True
+    path: '/home/manu/Projects/DNI-Bio/logs/mixed 32/dni/'
+    epoch-num: 20
+    synced-init: True
 
 # Experimental settings
 experiment-params: 

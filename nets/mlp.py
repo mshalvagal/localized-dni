@@ -20,7 +20,7 @@ def one_hot(indexes, n_classes, device='cpu'):
 
 class Net(nn.Module):
     def __init__(self, use_dni=False, context=False, device='cpu', num_neurons=256,
-                 synthesizer_type='mlp', non_zero_init=False, freeze_synthesizer=False,
+                 synthesizer_type='mlp', non_zero_init=False, freeze_synthesizer=False, scale_synth_grad=False,
                  trained_net_file=None, trained_net_initial_file=None):
         super(Net, self).__init__()
         self.hidden1 = nn.Linear(784, num_neurons, bias=False)
@@ -35,14 +35,14 @@ class Net(nn.Module):
         self.num_neurons = num_neurons
 
         if self.use_dni:
-            self._init_dni(synthesizer_type, freeze_synthesizer, non_zero_init, trained_net_file, trained_net_initial_file)
+            self._init_dni(synthesizer_type, freeze_synthesizer, non_zero_init, scale_synth_grad, trained_net_file, trained_net_initial_file)
 
         self.output = nn.Linear(num_neurons, 10, bias=False)
         self.output_bn = nn.BatchNorm1d(10)
         self.to(device)
 
 
-    def _init_dni(self, synthesizer_type, freeze_synthesizer, non_zero_init, trained_net_file, trained_net_initial_file):
+    def _init_dni(self, synthesizer_type, freeze_synthesizer, non_zero_init, scale_synth_grad, trained_net_file, trained_net_initial_file):
         if self.context:
             context_dim = 10
         else:
@@ -51,7 +51,8 @@ class Net(nn.Module):
         if synthesizer_type == 'mlp':
             synthesizer = dni.BasicSynthesizer(
                 output_dim=self.num_neurons, context_dim=context_dim, n_hidden=1,
-                non_zero_init=non_zero_init
+                non_zero_init=non_zero_init,
+                normalize_output=scale_synth_grad
             )
         if synthesizer_type == 'local_mlp':
             synthesizer = LocalSynthesizer(

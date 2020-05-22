@@ -86,6 +86,8 @@ class Experiment():
                 description += '_pretrained_' + str(self.network_config['synth-grad-frozen']['epoch-num']) + '_epochs'
                 if self.network_config['synth-grad-frozen']['synced-init']:
                     description += '_synced'
+            if self.network_config['dni']['scale-grad']:
+                description += '_scaled_grad'
             if self.network_config['dni']['non-zero-init']:
                 description += '_nonzero'
             dirname += description
@@ -130,6 +132,7 @@ class Experiment():
                 synthesizer_type=self.network_config['dni']['synthesizer'],
                 non_zero_init=self.network_config['dni']['non-zero-init'],
                 freeze_synthesizer=self.network_config['synth-grad-frozen']['flag'],
+                scale_synth_grad=self.network_config['dni']['scale-grad'],
                 trained_net_file=trained_net_file,
                 trained_net_initial_file=trained_net_initial_file
                 )
