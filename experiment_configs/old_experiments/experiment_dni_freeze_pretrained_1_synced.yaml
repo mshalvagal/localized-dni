@@ -1,0 +1,42 @@
+---
+# Setup
+random-seed: 25
+num-runs: 3
+epochs: 40
+no-cuda: False
+
+# Logging parameters
+log-params:
+  log-interval: 10
+  logdir: 'logs'
+  metrics:
+    weights: True
+    loss: True
+    accuracy: True
+    test-accuracy: True
+    synth-grad-norm: True
+
+# Training hyperparameters
+hyperparams:
+  batch-size: 256
+  learning-rate: 0.001
+  test-batch-size: 1000
+
+# Network config
+network-config:
+  num-neurons: 32
+  dni: 
+    flag: True
+    context: False
+    non-zero-init: False
+    synthesizer: 'mlp'
+  synth-grad-frozen:
+    flag: True
+    pretrained: True
+    path: '/home/manu/Projects/DNI-Bio/logs/mixed 32/dni/'
+    epoch-num: 1
+    synced-init: True
+
+# Experimental settings
+experiment-params: 
+  optimizer: 'mixed'

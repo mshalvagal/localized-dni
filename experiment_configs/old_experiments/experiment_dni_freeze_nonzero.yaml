@@ -1,6 +1,6 @@
 ---
 # Setup
-random-seed: 42
+random-seed: 25
 num-runs: 3
 epochs: 40
 no-cuda: False
@@ -23,16 +23,20 @@ hyperparams:
   test-batch-size: 1000
 
 # Network config
-# Note: first hidden layer fixed at size 20 in case 2 hidden layers are used
 network-config:
+  num-neurons: 32
   dni: 
     flag: True
     context: False
+    non-zero-init: True
+    synthesizer: 'mlp'
   synth-grad-frozen:
     flag: True
     pretrained: False
-    path: '/home/manu/Projects/dni-bio'
+    path: '/home/manu/Projects/DNI-Bio/logs/sgd 256/dni/weight_history/run_0/'
+    epoch-num: 2
+    synced-init: False
 
 # Experimental settings
 experiment-params: 
-  placeholder: None
+  optimizer: 'mixed'

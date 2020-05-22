@@ -1,0 +1,42 @@
+---
+# Setup
+random-seed: 25
+num-runs: 3
+epochs: 40
+no-cuda: False
+
+# Logging parameters
+log-params:
+  log-interval: 10
+  logdir: 'logs'
+  metrics:
+    weights: True
+    loss: True
+    accuracy: True
+    test-accuracy: True
+    synth-grad-norm: True
+
+# Training hyperparameters
+hyperparams:
+  batch-size: 256
+  learning-rate: 0.001
+  test-batch-size: 1000
+
+# Network config
+network-config:
+  num-neurons: 32
+  dni: 
+    flag: True
+    context: False
+    non-zero-init: False
+    synthesizer: 'local_mlp'
+  synth-grad-frozen:
+    flag: False
+    pretrained: False
+    path: '/home/manu/Projects/DNI-Bio/logs/sgd 256/dni/'
+    epoch-num: 2
+    synced-init: False
+
+# Experimental settings
+experiment-params: 
+  optimizer: 'mixed'

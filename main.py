@@ -118,8 +118,9 @@ class Experiment():
             use_pretrained = self.network_config['synth-grad-frozen']['pretrained']
             synced_init = self.network_config['synth-grad-frozen']['synced-init'] and use_pretrained
             epoch_num = self.network_config['synth-grad-frozen']['epoch-num'] # Which epoch to load synthesizer from
-            trained_net_file = os.path.join(self.network_config['synth-grad-frozen']['path'], 'epoch_' + str(epoch_num) + '.pt') if use_pretrained else None
-            trained_net_initial_file = os.path.join(self.network_config['synth-grad-frozen']['path'], 'epoch_0.pt') if synced_init else None
+            net_path = os.path.join(self.network_config['synth-grad-frozen']['path'], 'weight_history/run_' + str(i)) # Specific run to load
+            trained_net_file = os.path.join(net_path, 'epoch_' + str(epoch_num) + '.pt') if use_pretrained else None
+            trained_net_initial_file = os.path.join(net_path, 'epoch_0.pt') if synced_init else None
 
             self.net = self.network_generator(
                 use_dni=self.network_config['dni']['flag'],
@@ -261,5 +262,5 @@ if __name__ == '__main__':
 
     torch.manual_seed(settings['random-seed'])
     experiment = Experiment(settings)
-    shutil.copy2(args.experiment_file, experiment.logdir)
+    shutil.copy2(args.experiment_file, os.path.join(experiment.logdir, 'experiment_settings.yaml'))
     experiment.run_experiment()

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import dni
+from nets.custom_dni import LocalSynthesizer
 
 def one_hot(indexes, n_classes, device='cpu'):
     result = torch.FloatTensor(indexes.size() + (n_classes,))
@@ -53,7 +54,10 @@ class Net(nn.Module):
                 non_zero_init=non_zero_init
             )
         if synthesizer_type == 'local_mlp':
-            pass #TODO
+            synthesizer = LocalSynthesizer(
+                output_dim=self.num_neurons, context_dim=context_dim,
+                non_zero_init=non_zero_init
+            )
         if synthesizer_type == 'conv':
             pass #TODO
 
